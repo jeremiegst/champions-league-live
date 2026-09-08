@@ -123,7 +123,8 @@ body {
   border: 1px solid var(--border); border-radius: 9px;
   font-size: 20px; line-height: 1; cursor: pointer;
 }
-.nav-btn:hover { border-color: var(--text-dim); }
+.nav-btn:hover:not(:disabled) { border-color: var(--text-dim); }
+.nav-btn:disabled, .ghost-btn:disabled { opacity: .35; cursor: default; }
 
 .ghost-btn {
   flex: none; padding: 7px 12px;
@@ -147,6 +148,19 @@ body {
 }
 .md-chip:hover { color: var(--text); }
 .md-chip.is-active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.md-chip .cnt {
+  display: inline-block; margin-left: 3px;
+  padding: 0 4px; border-radius: 5px;
+  background: var(--surface-2); color: var(--text-dim);
+  font-size: 11px; font-weight: 620;
+}
+.md-chip.is-active .cnt { background: var(--surface); color: var(--accent); }
+/* Today gets a dot so it stays findable once the strip spans months. */
+.md-chip.is-today::before {
+  content: ""; display: inline-block;
+  width: 5px; height: 5px; margin-right: 5px; border-radius: 50%;
+  background: var(--accent); vertical-align: 1px;
+}
 
 /* ── Match cards ────────────────────────────────────────── */
 .matches { display: flex; flex-direction: column; gap: 10px; }

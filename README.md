@@ -40,8 +40,15 @@ them directly with no backend:
 Base: `https://site.api.espn.com/apis/site/v2/sports` (standings live under
 `https://site.api.espn.com/apis/v2/sports`).
 
-`dates` also accepts a range — `?dates=20260908-20260910` — which is how the
-matchday strip finds nearby fixture dates in one request.
+`dates` also accepts a range — `?dates=20260908-20260910` — which is how the app
+discovers which days have fixtures. Two quirks matter here:
+
+- **A ranged response is capped at 100 events.** So the fixture index is built
+  in ~45-day chunks rather than a season at a time. Asking for a whole season
+  truncates silently, which would make real matchdays look empty.
+- **Ranged responses omit `calendarStartDate` / `calendarEndDate`.** Only the
+  undated request carries them, so there are no season bounds available to stop
+  a search at — hence the explicit ±400-day search bound below.
 
 **This is an undocumented endpoint.** It's widely used and stable in practice,
 but ESPN makes no promises about it. If you need a contract you can rely on,
@@ -68,7 +75,14 @@ send permissive CORS headers.
   calendar day, so a 21:00 UTC kickoff shows under the right date wherever you
   are. All times render in the browser's locale (`Intl`), which is why the
   labels come out in French on a French-locale machine.
-- **Keyboard** — `←` / `→` move a day at a time.
+- **Fixture-only navigation** — the arrows, the date strip and `Today` only ever
+  move between days that actually have matches, so you never land on an empty
+  date. The app keeps an index of match days and grows it lazily as you
+  navigate, bounded to ±400 days from today. That bound is what stops an
+  exhausted search, and it's generous enough that stepping back from the opening
+  matchday reaches the previous season's final. Opening the app on a day with no
+  matches lands on the nearest matchday instead.
+- **Keyboard** — `←` / `→` step between matchdays.
 - **Match detail** — click any match to expand goals and cards, split into one
   column per team. Home/away is resolved from each competitor's `homeAway`
   field, never array position, because ESPN doesn't guarantee the order.

@@ -1,7 +1,13 @@
-/* Champions League Live — zero-dependency client for ESPN's public soccer API.
+/* Champions League Scores — zero-dependency client for ESPN's public soccer API.
    No API key, no build step. Two endpoints do all the work:
      scoreboard?dates=YYYYMMDD[-YYYYMMDD]  → fixtures, live clocks, goals, cards
-     standings                             → the 36-team league-phase table       */
+     standings                             → the 36-team league-phase table
+
+   Navigation is fixture-based: the app keeps an index of which days actually
+   have matches and only ever moves between those, so the arrows and the date
+   strip never land on an empty day. The index grows lazily because ESPN caps
+   any single range response at 100 events — asking for a whole season would
+   silently truncate and make real matchdays look empty.                      */
 
 const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard';
 const STANDINGS  = 'https://site.api.espn.com/apis/v2/sports/soccer/uefa.champions/standings';
@@ -9,13 +15,34 @@ const STANDINGS  = 'https://site.api.espn.com/apis/v2/sports/soccer/uefa.champio
 const LIVE_MS = 30_000;    // poll cadence while something is in play
 const IDLE_MS = 300_000;   // …and when nothing is
 
+const SEED_BACK = 20;      // days indexed behind today on first load
+const SEED_FWD  = 25;      // …and ahead of it
+const CHUNK     = 45;      // days per lazy index extension (keeps us under the 100-event cap)
+
+/* How far from today the index will ever reach. This is the stop condition for
+   lazy growth: ranged scoreboard responses omit calendarStartDate/EndDate (only
+   the undated one carries them), so there are no season bounds to stop at and
+   an exhausted search would otherwise fetch chunks forever. 400 days spans this
+   season plus the tail of the last one, which is why stepping back from the
+   opening matchday reaches the previous final. */
+const SEARCH_DAYS = 400;
+
+const minDate = (a, b) => (a < b ? a : b);
+const maxDate = (a, b) => (a > b ? a : b);
+
 const state = {
   view: 'matches',
   date: new Date(),
   expanded: new Set(),
   events: [],
   standings: null,
-  strip: null,
+
+  /** dayKey → Set of event ids. A Set makes re-indexing the same day idempotent. */
+  index: new Map(),
+  covFrom: null,           // contiguous indexed range, as Dates
+  covTo: null,
+
+  busy: false,
   timer: null,
 };
 
@@ -29,6 +56,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const apiDay = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
 const shiftDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const fromDayKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
 const dateFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -44,31 +72,91 @@ async function getJSON(url) {
 const sideOf = (comp, role) => comp.competitors.find((c) => c.homeAway === role) ?? comp.competitors[0];
 const logoOf = (team) => team?.logo ?? team?.logos?.[0]?.href ?? '';
 
+/* ── fixture index ───────────────────────────────────────── */
+function absorb(data) {
+  const events = data.events ?? [];
+  for (const e of events) {
+    const k = dayKey(new Date(e.date));
+    if (!state.index.has(k)) state.index.set(k, new Set());
+    state.index.get(k).add(e.id);
+  }
+
+  const lg = data.leagues?.[0];
+  if (lg) {
+    const yr = lg.season?.year;
+    const phase = lg.season?.type?.name ?? '';
+    $('#season-line').textContent =
+      [yr ? `${yr}/${String((yr % 100) + 1).padStart(2, '0')}` : null, phase]
+        .filter(Boolean).join(' · ') || 'Season';
+  }
+  return events;
+}
+
+const fetchRange = async (from, to) =>
+  absorb(await getJSON(`${SCOREBOARD}?dates=${apiDay(from)}-${apiDay(to)}`));
+
+/** Push the indexed range one chunk further. Returns false at the search bound. */
+async function growIndex(dir) {
+  const floor = shiftDays(new Date(), -SEARCH_DAYS);
+  const ceil  = shiftDays(new Date(),  SEARCH_DAYS);
+
+  if (dir > 0) {
+    if (state.covTo >= ceil) return false;
+    const from = shiftDays(state.covTo, 1);
+    const to = minDate(shiftDays(from, CHUNK), ceil);
+    await fetchRange(from, to);
+    state.covTo = to;
+  } else {
+    if (state.covFrom <= floor) return false;
+    const to = shiftDays(state.covFrom, -1);
+    const from = maxDate(shiftDays(to, -CHUNK), floor);
+    await fetchRange(from, to);
+    state.covFrom = from;
+  }
+  return true;
+}
+
+const sortedDays = () => [...state.index.keys()].sort();
+
+/** Nearest day with fixtures strictly after (dir>0) or before (dir<0) `from`. */
+async function findFixtureDay(from, dir) {
+  const fromKey = dayKey(from);
+  for (let guard = 0; guard < 14; guard++) {
+    const days = sortedDays();
+    const hit = dir > 0
+      ? days.find((k) => k > fromKey)
+      : days.filter((k) => k < fromKey).pop();
+    // Coverage is contiguous and contains `from`, so the closest indexed day
+    // in this direction really is the next fixture — no need to look further.
+    if (hit) return fromDayKey(hit);
+    if (!(await growIndex(dir))) return null;
+  }
+  return null;
+}
+
+/** Cheap, index-only guess at whether the arrow should be live. */
+function canGo(dir) {
+  const k = dayKey(state.date);
+  const days = sortedDays();
+  if (dir > 0) {
+    return days.some((x) => x > k) || state.covTo < shiftDays(new Date(), SEARCH_DAYS);
+  }
+  return days.some((x) => x < k) || state.covFrom > shiftDays(new Date(), -SEARCH_DAYS);
+}
+
 /* ── data loading ────────────────────────────────────────── */
 async function loadMatches({ quiet = false } = {}) {
   if (!quiet) $('#matches').innerHTML =
     '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
 
-  // Fetch a ±1-day window, then filter to the viewer's local day. This keeps
-  // late kickoffs on the right date in every timezone.
-  const from = apiDay(shiftDays(state.date, -1));
-  const to   = apiDay(shiftDays(state.date, 1));
-
+  // A ±1-day window filtered to the viewer's local day keeps late kickoffs on
+  // the right date in every timezone, and refreshes live clocks.
   try {
-    const data = await getJSON(`${SCOREBOARD}?dates=${from}-${to}`);
+    const events = await fetchRange(shiftDays(state.date, -1), shiftDays(state.date, 1));
     const want = dayKey(state.date);
-    state.events = (data.events ?? [])
+    state.events = events
       .filter((e) => dayKey(new Date(e.date)) === want)
       .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    const league = data.leagues?.[0];
-    if (league) {
-      const phase = league.season?.type?.name ?? '';
-      const yr = league.season?.year;
-      $('#season-line').textContent =
-        [yr ? `${yr}/${String((yr % 100) + 1).padStart(2, '0')}` : null, phase]
-          .filter(Boolean).join(' · ') || 'Season';
-    }
 
     renderMatches();
     stampUpdated();
@@ -96,23 +184,6 @@ async function loadStandings({ quiet = false } = {}) {
   }
 }
 
-/** Dates with fixtures in a 3-week window, for the quick-jump strip. */
-async function loadStrip() {
-  try {
-    const data = await getJSON(
-      `${SCOREBOARD}?dates=${apiDay(shiftDays(new Date(), -7))}-${apiDay(shiftDays(new Date(), 14))}`);
-    const days = new Map();
-    for (const e of data.events ?? []) {
-      const d = new Date(e.date);
-      const k = dayKey(d);
-      if (!days.has(k)) days.set(k, { key: k, date: d, n: 0 });
-      days.get(k).n++;
-    }
-    state.strip = [...days.values()].sort((a, b) => a.date - b.date);
-    renderStrip();
-  } catch { /* the strip is a convenience; failing it shouldn't break the page */ }
-}
-
 /* ── rendering: matches ──────────────────────────────────── */
 function renderMatches() {
   const box = $('#matches');
@@ -128,21 +199,19 @@ function renderMatches() {
     `${today ? 'Today · ' : ''}${n === 0 ? 'no fixtures' : n === 1 ? '1 match' : `${n} matches`}`;
 
   if (!state.events.length) {
-    box.innerHTML = `<div class="empty">No Champions League matches on this date.<br>
-      Use the arrows or the dates above to find the next matchday.</div>`;
-    renderStrip();
-    return;
-  }
-
-  box.innerHTML = state.events.map(matchCard).join('');
-  box.querySelectorAll('.match-head').forEach((head) => {
-    head.addEventListener('click', () => {
-      const id = head.closest('.match').dataset.id;
-      state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id);
-      renderMatches();
+    box.innerHTML = `<div class="empty">No Champions League matches on this date.</div>`;
+  } else {
+    box.innerHTML = state.events.map(matchCard).join('');
+    box.querySelectorAll('.match-head').forEach((head) => {
+      head.addEventListener('click', () => {
+        const id = head.closest('.match').dataset.id;
+        state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id);
+        renderMatches();
+      });
     });
-  });
+  }
   renderStrip();
+  syncNav();
 }
 
 function matchCard(ev) {
@@ -252,31 +321,43 @@ function classify(d) {
   return null;
 }
 
+/* ── rendering: the fixture-date strip ───────────────────── */
 function renderStrip() {
   const box = $('#matchday-strip');
-  if (!state.strip?.length) { box.hidden = true; return; }
+  const days = sortedDays();
+  if (!days.length) { box.hidden = true; return; }
+
   const cur = dayKey(state.date);
+  const todayKey = dayKey(new Date());
   box.hidden = false;
-  box.innerHTML = state.strip.map((d) =>
-    `<button type="button" class="md-chip${d.key === cur ? ' is-active' : ''}" data-day="${d.key}">
-       ${esc(chipFmt.format(d.date))} <span class="muted">· ${d.n}</span>
-     </button>`).join('');
+  box.innerHTML = days.map((k) => {
+    const n = state.index.get(k).size;
+    return `<button type="button" class="md-chip${k === cur ? ' is-active' : ''}${k === todayKey ? ' is-today' : ''}"
+              data-day="${k}" title="${n} match${n === 1 ? '' : 'es'}">
+        ${esc(chipFmt.format(fromDayKey(k)))} <span class="cnt">${n}</span>
+      </button>`;
+  }).join('');
+
   box.querySelectorAll('.md-chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      const [y, m, dd] = chip.dataset.day.split('-').map(Number);
-      state.date = new Date(y, m - 1, dd);
-      state.expanded.clear();
-      loadMatches();
-    });
+    chip.addEventListener('click', () => goTo(fromDayKey(chip.dataset.day)));
   });
+
+  // Keep the selected day visible as the index grows in either direction.
+  box.querySelector('.is-active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+
+function syncNav() {
+  $('#prev-day').disabled = state.busy || !canGo(-1);
+  $('#next-day').disabled = state.busy || !canGo(1);
+  $('#today-btn').disabled = state.busy;
 }
 
 /* ── rendering: standings ────────────────────────────────── */
 const ZONES = [
-  [/round of 16/i,            'var(--zone-r16)'],
-  [/playoffs?\s*-\s*seeded/i, 'var(--zone-seeded)'],
+  [/round of 16/i,              'var(--zone-r16)'],
+  [/playoffs?\s*-\s*seeded/i,   'var(--zone-seeded)'],
   [/playoffs?\s*-\s*unseeded/i, 'var(--zone-unseeded)'],
-  [/eliminated/i,             'var(--zone-out)'],
+  [/eliminated/i,               'var(--zone-out)'],
 ];
 const zoneFor = (note, rank) => {
   for (const [re, col] of ZONES) if (re.test(note ?? '')) return col;
@@ -285,7 +366,7 @@ const zoneFor = (note, rank) => {
 };
 
 const statOf = (entry, name) => entry.stats?.find((s) => s.name === name);
-const num = (entry, name) => Number(statOf(entry, name)?.value ?? 0);
+const num  = (entry, name) => Number(statOf(entry, name)?.value ?? 0);
 const disp = (entry, name) => statOf(entry, name)?.displayValue ?? '0';
 
 function renderStandings() {
@@ -345,20 +426,45 @@ function stampUpdated() {
   $('#updated').textContent = `Updated ${timeFmt.format(new Date())}`;
 }
 
-/* ── wiring ──────────────────────────────────────────────── */
-function go(days) {
-  state.date = shiftDays(state.date, days);
+/* ── navigation ──────────────────────────────────────────── */
+async function goTo(date) {
+  state.date = date;
   state.expanded.clear();
-  loadMatches();
+  renderStrip();
+  syncNav();
+  await loadMatches();
 }
 
-$('#prev-day').addEventListener('click', () => go(-1));
-$('#next-day').addEventListener('click', () => go(1));
-$('#today-btn').addEventListener('click', () => {
-  state.date = new Date();
-  state.expanded.clear();
-  loadMatches();
-});
+/** Move to the previous/next day that actually has matches. */
+async function step(dir) {
+  if (state.busy) return;
+  state.busy = true;
+  syncNav();
+  try {
+    const target = await findFixtureDay(state.date, dir);
+    if (target) { state.busy = false; await goTo(target); return; }
+  } catch { /* fall through and just re-enable the controls */ }
+  state.busy = false;
+  syncNav();
+}
+
+/** Today if it has matches, otherwise the closest matchday either side. */
+async function goToday() {
+  if (state.busy) return;
+  const now = new Date();
+  if (state.index.has(dayKey(now))) return goTo(now);
+
+  state.busy = true; syncNav();
+  const [next, prev] = [await findFixtureDay(now, 1), await findFixtureDay(now, -1)];
+  state.busy = false;
+  const pick = !next ? prev : !prev ? next
+    : (next - now <= now - prev ? next : prev);      // ties go to the upcoming one
+  return goTo(pick ?? now);
+}
+
+$('#prev-day').addEventListener('click', () => step(-1));
+$('#next-day').addEventListener('click', () => step(1));
+$('#today-btn').addEventListener('click', goToday);
 
 $('#refresh-btn').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
@@ -383,8 +489,8 @@ document.querySelectorAll('.tab').forEach((tab) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, textarea')) return;
-  if (e.key === 'ArrowLeft')  go(-1);
-  if (e.key === 'ArrowRight') go(1);
+  if (e.key === 'ArrowLeft')  step(-1);
+  if (e.key === 'ArrowRight') step(1);
 });
 
 // Re-sync the moment the tab comes back, so scores are never stale on focus.
@@ -393,5 +499,28 @@ document.addEventListener('visibilitychange', () => {
   else refreshAll();
 });
 
-loadMatches();
-loadStrip();
+/* ── boot ────────────────────────────────────────────────── */
+(async function init() {
+  $('#matches').innerHTML =
+    '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+
+  const from = shiftDays(new Date(), -SEED_BACK);
+  const to   = shiftDays(new Date(), SEED_FWD);
+  state.covFrom = from;
+  state.covTo = to;
+
+  try {
+    await fetchRange(from, to);
+  } catch {
+    // Index unavailable; the day view below still works on its own.
+  }
+
+  // Never open on an empty day.
+  if (state.index.size && !state.index.has(dayKey(state.date))) {
+    await goToday();
+  } else {
+    renderStrip();
+    syncNav();
+    await loadMatches();
+  }
+})();
