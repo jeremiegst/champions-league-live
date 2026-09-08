@@ -1,4 +1,4 @@
-# Champions League Live
+# Champions League Scores
 
 A small web app for following Champions League results: live scores with the
 running clock, goals and cards per match, and the 36-team league-phase table
