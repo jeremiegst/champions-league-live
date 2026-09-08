@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Champions League Live</title>
+<meta name="description" content="Live Champions League scores, goals and the league-phase table.">
+<meta name="theme-color" content="#1b3fa0">
+
+<!-- Link preview, for when the URL is pasted into a chat. -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Champions League Live">
+<meta property="og:description" content="Live scores, goalscorers and the 36-team league-phase table.">
+<meta name="twitter:card" content="summary">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='%231b3fa0'/><circle cx='16' cy='16' r='5.5' fill='white'/></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M12 6.4l1.9 3.3h-3.8zM7.4 12.2l3.3-1.9 1.9 3.3-3.3 1.9zM16.6 12.2l-1.9 3.3 1.9 3.3 3.3-1.9z"
+            fill="currentColor" opacity=".85"/>
+    </svg>
+    <div class="brand-text">
+      <h1>Champions League</h1>
+      <p id="season-line" class="muted">Loading season…</p>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <span id="live-badge" class="live-badge" hidden><i class="pulse"></i><span id="live-count">0</span> live</span>
+    <button id="refresh-btn" class="icon-btn" title="Refresh now" aria-label="Refresh now">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab is-active" data-view="matches" role="tab" aria-selected="true">Matches</button>
+  <button class="tab" data-view="standings" role="tab" aria-selected="false">League table</button>
+</nav>
+
+<!-- ── Matches ───────────────────────────────────────────── -->
+<main id="view-matches" class="view">
+  <div class="datebar">
+    <button id="prev-day" class="nav-btn" aria-label="Previous day">‹</button>
+    <div class="datebar-center">
+      <strong id="date-label">—</strong>
+      <span id="date-sub" class="muted"></span>
+    </div>
+    <button id="next-day" class="nav-btn" aria-label="Next day">›</button>
+    <button id="today-btn" class="ghost-btn">Today</button>
+  </div>
+
+  <div id="matchday-strip" class="md-strip" hidden></div>
+  <div id="matches" class="matches"></div>
+</main>
+
+<!-- ── Standings ─────────────────────────────────────────── -->
+<main id="view-standings" class="view" hidden>
+  <div id="standings-wrap" class="table-wrap"></div>
+  <ul class="legend">
+    <li><i class="sw zone-r16"></i>1–8 · straight to round of 16</li>
+    <li><i class="sw zone-seeded"></i>9–16 · playoff (seeded)</li>
+    <li><i class="sw zone-unseeded"></i>17–24 · playoff (unseeded)</li>
+    <li><i class="sw zone-out"></i>25–36 · eliminated</li>
+  </ul>
+</main>
+
+<footer class="foot">
+  <span id="updated" class="muted">—</span>
+  <span class="muted">Data: ESPN public API · auto-refreshes while matches are live</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
