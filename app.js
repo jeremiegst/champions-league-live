@@ -134,6 +134,17 @@ async function findFixtureDay(from, dir) {
   return null;
 }
 
+/** Indexed fixture days that fall inside the currently covered range. Boot uses
+    this so the opening date can only ever be near today: growing the index at
+    boot would make it depend on how the API answered, and a range response that
+    includes stray out-of-window events could strand the viewer months away. */
+function indexedDaysInCoverage() {
+  return sortedDays().filter((k) => {
+    const d = fromDayKey(k);
+    return d >= state.covFrom && d <= state.covTo;
+  });
+}
+
 /** Cheap, index-only guess at whether the arrow should be live. */
 function canGo(dir) {
   const k = dayKey(state.date);
@@ -515,12 +526,19 @@ document.addEventListener('visibilitychange', () => {
     // Index unavailable; the day view below still works on its own.
   }
 
-  // Never open on an empty day.
-  if (state.index.size && !state.index.has(dayKey(state.date))) {
-    await goToday();
-  } else {
-    renderStrip();
-    syncNav();
-    await loadMatches();
+  // Never open on an empty day, and never land outside the seed window.
+  if (!state.index.has(dayKey(state.date))) {
+    const near = indexedDaysInCoverage();
+    if (near.length) {
+      const now = new Date();
+      const closest = near.reduce((best, k) =>
+        Math.abs(fromDayKey(k) - now) < Math.abs(fromDayKey(best) - now) ? k : best);
+      state.date = fromDayKey(closest);
+    }
+    // Nothing nearby at all (deep off-season): stay on today and say so.
   }
+
+  renderStrip();
+  syncNav();
+  await loadMatches();
 })();
