@@ -180,6 +180,11 @@ body {
 
 .side { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .side.away { flex-direction: row-reverse; }
+/* The name grows to absorb slack (so the price hugs the centre), which leaves
+   the away name start-aligned in a stretched box and drifting away from its own
+   crest. End-align it so it sits beside the logo, mirroring the home row. */
+.side.away .tname { text-align: right; }
+
 .side img { width: 30px; height: 30px; object-fit: contain; flex: none; }
 .side .tname {
   flex: 1 1 auto; min-width: 0;      /* absorb slack so the price hugs the centre */
