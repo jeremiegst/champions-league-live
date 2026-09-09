@@ -263,6 +263,46 @@ function renderMatches() {
   syncNav();
 }
 
+/* ── odds ────────────────────────────────────────────────── */
+/** ESPN quotes American odds ("+230", "-145"); European football is read in
+    decimal, so convert: +230 → 3.30, -145 → 1.69. */
+function toDecimal(american) {
+  if (american == null) return null;
+  const s = String(american).trim();
+  if (/^even$/i.test(s)) return 2;
+  const n = Number(s.replace('+', ''));
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
+}
+
+/** Home / draw / away prices in decimal, or null when the book quotes none.
+    `close` is the current line, `open` the fallback; the draw also has its own
+    legacy field. Odds are the sportsbook's, so the provider is credited in the
+    expanded card. */
+function readOdds(comp) {
+  const o = comp.odds?.[0];
+  if (!o) return null;
+  const ml = (side) => o.moneyline?.[side]?.close?.odds ?? o.moneyline?.[side]?.open?.odds;
+  const odds = {
+    home: toDecimal(ml('home')),
+    draw: toDecimal(ml('draw') ?? o.drawOdds?.moneyLine),
+    away: toDecimal(ml('away')),
+    provider: o.provider?.displayName ?? o.provider?.name ?? null,
+  };
+  return (odds.home ?? odds.draw ?? odds.away) == null ? null : odds;
+}
+
+const fmtOdds = (v) => (v == null ? '' : v.toFixed(2));
+
+/** Stacked 1 / X / 2 row. CSS shows this instead of the inline chips on narrow
+    screens, where three prices inside the team rows truncate the names to
+    nothing. Same numbers, just somewhere they fit. */
+function oddsRow(o) {
+  const cell = (label, v) => (v == null ? "" : `<span><i>${label}</i>${fmtOdds(v)}</span>`);
+  return `<div class="odds-row">${cell("1", o.home)}${cell("X", o.draw)}${cell("2", o.away)}</div>`;
+}
+
+
 function matchCard(ev) {
   const comp  = ev.competitions[0];
   const st    = ev.status?.type ?? {};
@@ -272,11 +312,14 @@ function matchCard(ev) {
   const isPre  = st.state === 'pre';
   const done   = st.state === 'post';
   const open   = state.expanded.has(ev.id);
+  // Prices only make sense before kick-off; with a score on screen they are noise.
+  const odds   = isPre ? readOdds(comp) : null;
 
   // Centre column: kickoff before the match, score once it's under way.
   let centre;
   if (isPre) {
-    centre = `<div class="kickoff">${timeFmt.format(new Date(ev.date))}</div>`;
+    centre = `<div class="kickoff">${timeFmt.format(new Date(ev.date))}</div>` +
+             (odds?.draw != null ? `<span class="odd-draw">X ${fmtOdds(odds.draw)}</span>` : "");
   } else {
     const label = isLive
       ? (/HALFTIME/i.test(st.name ?? '') ? 'HT' : (ev.status.displayClock || 'LIVE'))
@@ -287,12 +330,13 @@ function matchCard(ev) {
               <span class="status${isLive ? ' live' : ''}">${esc(label)}</span>${pens}`;
   }
 
-  const side = (x, role) => {
+  const side = (x, role, price) => {
     const lost = done && x.winner === false && comp.competitors.some((y) => y.winner === true);
     const logo = logoOf(x.team);
     return `<div class="side ${role}${lost ? ' loser' : ''}">
       ${logo ? `<img src="${esc(logo)}" alt="" loading="lazy">` : ''}
       <span class="tname">${esc(x.team?.shortDisplayName || x.team?.displayName || '—')}</span>
+      ${price != null ? `<span class="odd">${fmtOdds(price)}</span>` : ""}
     </div>`;
   };
 
@@ -301,10 +345,12 @@ function matchCard(ev) {
 
   return `<article class="match${isLive ? ' is-live' : ''}" data-id="${esc(ev.id)}">
     <div class="match-head" role="button" tabindex="0" aria-expanded="${open}">
-      ${side(home, 'home')}
+      ${side(home, 'home', odds?.home)}
       <div class="center">${centre}</div>
-      ${side(away, 'away')}
+      ${side(away, 'away', odds?.away)}
     </div>
+    ${odds ? oddsRow(odds) : ""}
+
     ${note ? `<div class="note-line">${esc(note)}</div>` : ''}
     ${open ? detailPanel(ev, comp, home, away, isPre) : ''}
   </article>`;
@@ -335,11 +381,14 @@ function detailPanel(ev, comp, home, away, isPre) {
     ? `<div class="col">${cols.home.join('')}</div><div class="col away">${cols.away.join('')}</div>`
     : '';
 
+  const book = isPre ? readOdds(comp) : null;
+
   const meta = [
     comp.venue?.fullName && `${esc(comp.venue.fullName)}${comp.venue.address?.city ? `, ${esc(comp.venue.address.city)}` : ''}`,
     comp.attendance > 0 && `${comp.attendance.toLocaleString()} in attendance`,
     comp.broadcasts?.[0]?.names?.[0] && `TV: ${esc(comp.broadcasts[0].names[0])}`,
     isPre && `Kick-off ${timeFmt.format(new Date(ev.date))}`,
+    book?.provider && `Odds: ${esc(book.provider)}, decimal`,
   ].filter(Boolean);
 
   if (!rows && !meta.length) return '';

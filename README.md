@@ -93,6 +93,16 @@ send permissive CORS headers.
 - **Knockout rounds** — penalty shootouts render as `4–3 pens` under the score,
   and ESPN's own note lines carry aggregates ("PSG advance 6-5 on aggregate").
   The eliminated side is dimmed.
+- **Match odds** — upcoming matches show home / draw / away prices between each
+  team name and the kick-off time, with the draw under the time. ESPN quotes
+  American odds ("+230"); the app converts them to decimal, which is how
+  football prices are read in Europe. Prices show **only before kick-off** — the
+  API keeps them on finished matches, where a price beside a final score is just
+  noise — and the sportsbook is credited in the expanded card. On narrow screens
+  the three prices move to a stacked `1 / X / 2` row under the teams, because
+  inline they squeeze the team names down to nothing. Odds are displayed as data
+  only; the app deliberately does not link out to betting slips.
+
 - **Table zones are data-driven** — the stripe colours and the legend are built
   from each table's own `note.description` and `note.color`. That is why the
   Champions League shows "1–8 · Qualifies for round of 16" while Ligue 1 shows
