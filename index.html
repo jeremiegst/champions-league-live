@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Champions League Scores</title>
-<meta name="description" content="Live Champions League scores, goals and the league-phase table.">
+<title>Sport Scores</title>
+<meta name="description" content="Live football scores and tables — Champions League and Ligue 1.">
 <meta name="theme-color" content="#1b3fa0">
 
 <!-- Link preview, for when the URL is pasted into a chat. -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Champions League Scores">
-<meta property="og:description" content="Live scores, goalscorers and the 36-team league-phase table.">
+<meta property="og:title" content="Sport Scores">
+<meta property="og:description" content="Live scores, goalscorers and league tables — Champions League and Ligue 1.">
 <meta name="twitter:card" content="summary">
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='%231b3fa0'/><circle cx='16' cy='16' r='5.5' fill='white'/></svg>">
@@ -26,8 +26,8 @@
             fill="currentColor" opacity=".85"/>
     </svg>
     <div class="brand-text">
-      <h1>Champions League Scores</h1>
-      <p id="season-line" class="muted">Loading season…</p>
+      <h1>Sport Scores</h1>
+      <p id="season-line" class="muted">Loading…</p>
     </div>
   </div>
 
@@ -40,20 +40,23 @@
   </div>
 </header>
 
+<!-- Competition switcher, rendered from the COMPETITIONS list in app.js -->
+<nav class="comps" id="comps" aria-label="Competition"></nav>
+
 <nav class="tabs" role="tablist">
   <button class="tab is-active" data-view="matches" role="tab" aria-selected="true">Matches</button>
-  <button class="tab" data-view="standings" role="tab" aria-selected="false">League table</button>
+  <button class="tab" data-view="standings" role="tab" aria-selected="false">Table</button>
 </nav>
 
 <!-- ── Matches ───────────────────────────────────────────── -->
 <main id="view-matches" class="view">
   <div class="datebar">
-    <button id="prev-day" class="nav-btn" aria-label="Previous day">‹</button>
+    <button id="prev-day" class="nav-btn" aria-label="Previous matchday">‹</button>
     <div class="datebar-center">
       <strong id="date-label">—</strong>
       <span id="date-sub" class="muted"></span>
     </div>
-    <button id="next-day" class="nav-btn" aria-label="Next day">›</button>
+    <button id="next-day" class="nav-btn" aria-label="Next matchday">›</button>
     <button id="today-btn" class="ghost-btn">Today</button>
   </div>
 
@@ -61,15 +64,10 @@
   <div id="matches" class="matches"></div>
 </main>
 
-<!-- ── Standings ─────────────────────────────────────────── -->
+<!-- ── Table ─────────────────────────────────────────────── -->
 <main id="view-standings" class="view" hidden>
   <div id="standings-wrap" class="table-wrap"></div>
-  <ul class="legend">
-    <li><i class="sw zone-r16"></i>1–8 · straight to round of 16</li>
-    <li><i class="sw zone-seeded"></i>9–16 · playoff (seeded)</li>
-    <li><i class="sw zone-unseeded"></i>17–24 · playoff (unseeded)</li>
-    <li><i class="sw zone-out"></i>25–36 · eliminated</li>
-  </ul>
+  <ul id="legend" class="legend"></ul>
 </main>
 
 <footer class="foot">

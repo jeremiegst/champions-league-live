@@ -10,10 +10,7 @@
   --accent-dim:#e8edfb;
   --live:      #0f9d58;
   --live-bg:   #e6f6ed;
-  --zone-r16:      #15803d;
-  --zone-seeded:   #2563eb;
-  --zone-unseeded: #7dabf8;
-  --zone-out:      #cbd0da;
+  --pos:           #15803d;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(16,20,32,.06), 0 4px 16px rgba(16,20,32,.05);
   color-scheme: light;
@@ -31,10 +28,7 @@
     --accent-dim:#1a2340;
     --live:      #3ddc85;
     --live-bg:   #12301f;
-    --zone-r16:      #22c55e;
-    --zone-seeded:   #4f86f7;
-    --zone-unseeded: #2c4a7c;
-    --zone-out:      #333a48;
+    --pos:           #22c55e;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 18px rgba(0,0,0,.3);
     color-scheme: dark;
   }
@@ -281,7 +275,7 @@ td.team { text-align: left; }
 td.team .cell { display: flex; align-items: center; gap: 9px; }
 td.team img { width: 21px; height: 21px; object-fit: contain; flex: none; }
 td.pts { font-weight: 700; padding-right: 14px; }
-td.gd.pos { color: var(--zone-r16); }
+td.gd.pos { color: var(--pos); }
 td.gd.neg { color: #d14343; }
 
 .legend {
@@ -290,10 +284,6 @@ td.gd.neg { color: #d14343; }
 }
 .legend li { display: flex; align-items: center; gap: 7px; }
 .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
-.zone-r16      { background: var(--zone-r16); }
-.zone-seeded   { background: var(--zone-seeded); }
-.zone-unseeded { background: var(--zone-unseeded); }
-.zone-out      { background: var(--zone-out); }
 
 /* ── States ─────────────────────────────────────────────── */
 .empty, .error, .loading {
@@ -339,4 +329,41 @@ td.gd.neg { color: #d14343; }
   .detail { grid-template-columns: 1fr; }
   .detail .col.away .ev { flex-direction: row; text-align: left; }
   td.hide-sm, th.hide-sm { display: none; }
+}
+
+/* ── Competition switcher ───────────────────────────────── */
+:root { --on-accent: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --on-accent: #0d0f14; }
+}
+
+.comps {
+  display: flex; gap: 6px; overflow-x: auto;
+  max-width: 940px; margin: 0 auto;
+  padding: 2px clamp(14px, 4vw, 32px) 13px;
+  scrollbar-width: thin;
+}
+.comp {
+  flex: none; padding: 7px 14px;
+  background: var(--surface); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 999px;
+  font: inherit; font-size: 13px; font-weight: 580;
+  cursor: pointer; white-space: nowrap;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.comp:hover { color: var(--text); border-color: var(--text-dim); }
+/* Solid fill so the competition reads as the primary switch, distinct from
+   the outlined date chips below it. */
+.comp.is-active {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--on-accent); font-weight: 640;
+}
+
+/* Zone swatches are filled inline from the API's own colours, which are pale —
+   a hairline keeps them visible against both themes. */
+.legend .sw { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+
+@media (max-width: 560px) {
+  .comps { padding-top: 0; padding-bottom: 11px; }
+  .comp { padding: 6px 12px; font-size: 12.5px; }
 }
