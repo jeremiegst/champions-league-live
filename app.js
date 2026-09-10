@@ -174,6 +174,16 @@ function indexedDaysInCoverage() {
   });
 }
 
+/** Closest already-indexed fixture day to `from`, without fetching anything.
+    Used by the empty state to offer somewhere to go. */
+function nearestIndexedDay(from) {
+  const days = sortedDays();
+  if (!days.length) return null;
+  const t = fromDayKey(dayKey(from));
+  return fromDayKey(days.reduce((best, k) =>
+    Math.abs(fromDayKey(k) - t) < Math.abs(fromDayKey(best) - t) ? k : best));
+}
+
 /** Cheap, index-only guess at whether the arrow should be live. */
 function canGo(dir) {
   const c = C();
@@ -248,7 +258,17 @@ function renderMatches() {
     `${today ? 'Today · ' : ''}${n === 0 ? 'no fixtures' : n === 1 ? '1 match' : `${n} matches`}`;
 
   if (!c.events.length) {
-    box.innerHTML = `<div class="empty">No ${esc(labelOf(state.comp))} matches on this date.</div>`;
+    const near = nearestIndexedDay(c.date);
+    const nearKey = near && dayKey(near);
+    const count = nearKey ? c.index.get(nearKey).size : 0;
+    box.innerHTML = `<div class="empty">
+      No ${esc(labelOf(state.comp))} matches on this date.
+      ${nearKey && nearKey !== dayKey(c.date) ? `<button type="button" class="jump" data-day="${nearKey}">
+        Nearest matchday: ${esc(dateFmt.format(near))} · ${count} match${count === 1 ? "" : "es"}
+      </button>` : ""}
+    </div>`;
+    const jump = box.querySelector(".jump");
+    if (jump) jump.addEventListener("click", () => goTo(fromDayKey(jump.dataset.day)));
   } else {
     box.innerHTML = c.events.map(matchCard).join('');
     box.querySelectorAll('.match-head').forEach((head) => {
@@ -565,18 +585,17 @@ async function step(dir) {
   syncNav();
 }
 
-/** Today if it has matches, otherwise the closest matchday either side. */
-async function goToday() {
-  if (state.busy) return;
-  const now = new Date();
-  if (C().index.has(dayKey(now))) return goTo(now);
+/** Go to today, full stop. A button labelled "Today" that lands on some other
+    day is a lie, which is exactly how this used to behave for a competition
+    with no fixture today. When today is empty the empty state offers the
+    nearest matchday instead, one tap away.
 
-  state.busy = true; syncNav();
-  const [next, prev] = [await findFixtureDay(now, 1), await findFixtureDay(now, -1)];
-  state.busy = false;
-  const pick = !next ? prev : !prev ? next
-    : (next - now <= now - prev ? next : prev);      // ties go to the upcoming one
-  return goTo(pick ?? now);
+    Note this is deliberately different from opening a competition, which still
+    lands on the nearest matchday — that is a first impression, not the user
+    explicitly asking for today. */
+function goToday() {
+  if (state.busy) return;
+  return goTo(new Date());
 }
 
 /* ── competition switching ───────────────────────────────── */

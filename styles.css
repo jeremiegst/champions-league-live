@@ -297,12 +297,13 @@ td.gd.neg { color: #d14343; }
   color: var(--text-dim); font-size: 14px;
 }
 .error { color: #d14343; }
-.error button {
+.error button, .empty .jump {
   display: block; margin: 12px auto 0; padding: 7px 14px;
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border); border-radius: 9px;
   font: inherit; font-size: 13px; cursor: pointer;
 }
+.empty .jump:hover { color: var(--accent); border-color: var(--accent); }
 .skeleton {
   height: 68px; border-radius: var(--radius);
   background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 37%, var(--surface) 63%);

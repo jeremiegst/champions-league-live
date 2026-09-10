@@ -68,13 +68,21 @@ send permissive CORS headers.
 
 ## Behaviour worth knowing
 
-- **Fixture-only navigation** — the arrows, the date strip and `Today` only ever
-  move between days that actually have matches, so you never land on an empty
-  date. The app keeps an index of match days and grows it lazily as you
-  navigate, bounded to ±400 days from today. That bound is what stops an
-  exhausted search, and it's generous enough that stepping back from the
-  Champions League's opening matchday reaches the previous season's final.
-  Opening a competition on a day with no matches lands on the nearest matchday.
+- **Fixture-only stepping** — the arrows and the date strip only ever move
+  between days that actually have matches, so they never land on an empty date.
+  The app keeps an index of match days and grows it lazily as you navigate,
+  bounded to ±400 days from today. That bound is what stops an exhausted
+  search, and it's generous enough that stepping back from the Champions
+  League's opening matchday reaches the previous season's final.
+- **`Today` always means today.** It is not fixture-only, deliberately: a button
+  labelled "Today" that lands on another day is a lie, and it used to do exactly
+  that for a competition with no fixture today (Ligue 1 on a Thursday, say). If
+  today is empty you get today, and the empty state offers the nearest matchday
+  as a one-tap button. Note that *opening* a competition still lands on the
+  nearest matchday — that is a first impression, not an explicit request.
+- **Cache-busting** — `styles.css` and `app.js` are referenced with a `?v=N`
+  query. **Bump N whenever you change either file**, or browsers (and GitHub
+  Pages, which caches assets for 10 minutes) will keep serving the old one.
 - **Per-competition state** — each competition keeps its own fixture index,
   coverage window, selected date and table, so switching never mixes one into
   another. In-flight responses are discarded if you switch mid-load.
@@ -102,7 +110,6 @@ send permissive CORS headers.
   the three prices move to a stacked `1 / X / 2` row under the teams, because
   inline they squeeze the team names down to nothing. Odds are displayed as data
   only; the app deliberately does not link out to betting slips.
-
 - **Table zones are data-driven** — the stripe colours and the legend are built
   from each table's own `note.description` and `note.color`. That is why the
   Champions League shows "1–8 · Qualifies for round of 16" while Ligue 1 shows
