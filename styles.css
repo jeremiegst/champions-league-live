@@ -332,8 +332,12 @@ td.gd.neg { color: #d14343; }
   .side img { width: 26px; height: 26px; }
   .side .tname { font-size: 13.5px; }
   .score { font-size: 19px; }
-  .detail { grid-template-columns: 1fr; }
-  .detail .col.away .ev { flex-direction: row; text-align: left; }
+  /* Keep one column per team on narrow screens too, so every event stays
+     under its own side of the card and the away column keeps its right
+     alignment. Tighten the spacing rather than collapsing to one column. */
+  .detail { padding: 10px 12px 12px; gap: 5px 10px; }
+  .detail .ev { font-size: 12.5px; gap: 5px; }
+  .detail .ev .min { font-size: 11px; }
   td.hide-sm, th.hide-sm { display: none; }
 }
 
